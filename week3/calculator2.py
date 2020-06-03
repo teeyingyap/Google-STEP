@@ -1,17 +1,13 @@
+# instead of converting digit by digit
+# find the index range and convert it by float(line[start: end]) 
 def readNumber(line, index):
-  number = 0
-  while index < len(line) and line[index].isdigit():
-    number = number * 10 + int(line[index])
-    index += 1
-  if index < len(line) and line[index] == '.':
-    index += 1
-    keta = 0.1
-    while index < len(line) and line[index].isdigit():
-      number += int(line[index]) * keta
-      keta /= 10
-      index += 1
+  end = index
+  while end < len(line) and (line[end].isdigit() or line[end] == '.'):
+    end += 1
+  number = float(line[index:end])
   token = {'type': 'NUMBER', 'number': number}
-  return token, index
+  return token, end
+
 
 def readPlus(line, index):
   token = {'type': 'PLUS'}
@@ -21,6 +17,7 @@ def readPlus(line, index):
 def readMinus(line, index):
   token = {'type': 'MINUS'}
   return token, index + 1
+
 
 def readMultiply(line, index):
   token = {'type': 'MULTIPLY'}
@@ -45,17 +42,21 @@ def readRBracket(line, index):
 def tokenize(line):
   tokens = []
   index = 0
+  operatorFlag = 0
   while index < len(line):
     if line[index].isdigit():
       (token, index) = readNumber(line, index)
-    elif line[index] == '+':
-      (token, index) = readPlus(line, index)
-    elif line[index] == '-':
-      (token, index) = readMinus(line, index)
-    elif line[index] == '*':
-      (token, index) = readMultiply(line, index)
-    elif line[index] == '/':
-      (token, index) = readDivide(line, index)
+      operatorFlag = 0
+    elif line[index] in ['+', '-', '*', '/'] and operatorFlag == 0:
+      if line[index] == '+':
+        (token, index) = readPlus(line, index)
+      elif line[index] == '-':
+        (token, index) = readMinus(line, index)
+      elif line[index] == '*':
+        (token, index) = readMultiply(line, index)
+      elif line[index] == '/':
+        (token, index) = readDivide(line, index)
+      operatorFlag = 1
     elif line[index] == '(':
       (token, index) = readLBracket(line, index)
     elif line[index] == ')':
@@ -67,14 +68,13 @@ def tokenize(line):
   return tokens
 
 
-
 def evaluateMultiplyDivide(tokens):
   index = 0
   new_token_list = []
-  temp_index = 0
+  last_number_token = 0
   while index < len(tokens):
     if tokens[index]['type'] == 'MULTIPLY':
-      result = new_token_list[temp_index - 1]['number'] * tokens[index + 1]['number']
+      result = new_token_list[last_number_token - 1]['number'] * tokens[index + 1]['number']
       token = {'type': 'NUMBER', 'number': result}
       new_token_list[-1] = token
       index += 2
@@ -83,13 +83,13 @@ def evaluateMultiplyDivide(tokens):
         print('Cannot divide by zero!')
         exit(1)
       else:
-        result = new_token_list[temp_index  - 1]['number'] / tokens[index + 1]['number']
+        result = new_token_list[last_number_token  - 1]['number'] / tokens[index + 1]['number']
         token = {'type': 'NUMBER', 'number': result}
         new_token_list[-1] = token
         index += 2
     else:
       new_token_list.append(tokens[index])
-      temp_index +=1
+      last_number_token +=1
       index += 1
   return new_token_list
 
@@ -118,21 +118,20 @@ def evaluatePlusMinus(tokens):
 
 # Evaluate the terms inside the brackets using recursion
 def evaluateInside(tokens, index):
-  temp_array = []
+  temp_new_tokens = []
   brack_index = index
   while index < len(tokens) and tokens[brack_index]['type'] != 'RIGHT':
     if tokens[brack_index]['type'] == 'LEFT':
       answer_token, brack_index = evaluateInside(tokens, brack_index + 1)
-      temp_array.append(answer_token)
+      temp_new_tokens.append(answer_token)
       index = brack_index + 1
     else:
-      temp_array.append(tokens[brack_index])
+      temp_new_tokens.append(tokens[brack_index])
     brack_index += 1
-  evaluatedTokens = evaluateMultiplyDivide(temp_array)
+  evaluatedTokens = evaluateMultiplyDivide(temp_new_tokens)
   answer = evaluatePlusMinus(evaluatedTokens)
   token = {'type': 'NUMBER', 'number': answer}
   return token, brack_index 
-
 
 
 # remove the brackets in the list
@@ -151,18 +150,12 @@ def evaluateBrackets(tokens):
   return new_token_list 
 
 
-
-
-def evaluate(tokens):
-  debracketedTokens = evaluateBrackets(tokens)
-  evaluatedTokens = evaluateMultiplyDivide(debracketedTokens)
-  answer = evaluatePlusMinus(evaluatedTokens)
-  return answer
-
-
 def test(line):
   tokens = tokenize(line)
-  actualAnswer = evaluate(tokens)
+  tokens.insert(0, {'type': 'LEFT'})
+  tokens.append({'type': 'RIGHT'})
+  actualAnswerToken, index = evaluateInside(tokens, 0)
+  actualAnswer = actualAnswerToken['number']
   expectedAnswer = eval(line)
   if abs(actualAnswer - expectedAnswer) < 1e-8:
     print("PASS! (%s = %f)" % (line, expectedAnswer))
@@ -173,24 +166,24 @@ def test(line):
 # Add more tests to this function :)
 def runTest():
   print("==== Test started! ====")
+  test("1.1")
   test("1+2")
   test("1")
-  test("1.1+0")
   test("1.1+2.1")
   test("1.1-2.1")
   test("1.1*2.2")
   test("1.1/2.2")
   test("1.0+2.1-3")
+  test("1.0*2.1/3")
   test("1.0-2.1-3")
   test("1.0+2.1+3")
   test("1.0*2.1*3")
-  test("1-2-3")
+  test("1.0/2.1/3")
   test("1+2*3")
   test("7/8*3")
-  test("1.0*2.1*7/3/8")
-  test("1.0/2.1/3+9")
   test("3/5/6/3")
   test("3*5*6*3")
+  test("1-2-3")
   test("10.0+80.4/9.2/8.9+7.9-3.0*8.1")
   test("10.0+80.4+9.2-8.9-7.9/3.0/8.1*1.3*4.4")
   test("(3.0+4)*5") 
@@ -207,6 +200,8 @@ def runTest():
   test("(3.0+4*(2-1))/5")
   test("(3.0+4*(2-1))/(4+5*(8*2))")
   test("(3.0+4*(2-(1+1+1*4)))/5")
+  test("12++1")
+  test("12+1")
   print("==== Test finished! ====\n")
 
 runTest()
@@ -215,33 +210,8 @@ while True:
   print('> ', end="")
   line = input()
   tokens = tokenize(line)
-  answer = evaluate(tokens)
-  print("answer = %f\n" % answer)
-
-
-
-
-# first version: this code doesnt work when two brackets are back to back
-# def evaluateBrackets(tokens):
-#   index = 0
-#   new_token_list = []
-#   while index < len(tokens):
-#     if tokens[index]['type'] == 'LEFT':
-#       temp_array = []
-#       brack_index = index
-#       while tokens[brack_index + 1]['type'] != 'RIGHT':
-#         temp_array.append(tokens[brack_index + 1])
-#         brack_index += 1
-#       evaluatedTokens = evaluateMultiplyDivide(temp_array)
-#       answer = evaluatePlusMinus(evaluatedTokens)
-#       token = {'type': 'NUMBER', 'number': answer}
-#       new_token_list.append(token)
-
-#       index = brack_index + 2
-#       # print(index)
-#     else:
-#       new_token_list.append(tokens[index])
-#       index += 1
-    
-#   # print(new_token_list)
-#   return new_token_list 
+  # add dummy pair of parentheses
+  tokens.insert(0, {'type': 'LEFT'})
+  tokens.append({'type': 'RIGHT'})
+  answer = evaluateInside(tokens, 0)
+  print("answer = %f\n" % answer['number'])
