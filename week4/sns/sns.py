@@ -2,9 +2,6 @@
 
 from sys import argv
 
-graph = {}
-nicknameDict = {}
-
 class Node():
     def __init__(self, num, parent):
         self.num = num
@@ -12,8 +9,10 @@ class Node():
 
 
 def main():
-    load_nicknames("nicknames.txt")
-    load_links("links.txt")
+    graph = {}
+    nicknameDict = {}
+    load_nicknames("nicknames.txt", nicknameDict)
+    load_links("links.txt", graph)
 
     if len(argv) != 3:
         print("Usage: python sns.py start_name end_name")
@@ -26,17 +25,17 @@ def main():
     # get() return value of the item
     start = nicknameDict.get(argv[1])
     end = nicknameDict.get(argv[2])
-    if dfs(start, end):
+    if dfs(graph, start, end):
         print("%s can reach %s" % (argv[1], argv[2]))
     else:
         print("%s cannot reach %s" % (argv[1], argv[2]))
 
-    print("The shortest path is", bfs(start, end))
-    test(bfs(start, end))
+    print("The shortest path is", bfs(graph, start, end))
+    test(graph, bfs(graph, start, end))
 
 
 
-def load_nicknames(textfile):
+def load_nicknames(textfile, nicknameDict):
     # load nicknames into a python dictionary
     with open(textfile, "r") as file:
         for line in file.readlines():
@@ -44,7 +43,7 @@ def load_nicknames(textfile):
             nicknameDict[lineList[1]] = int(lineList[0])            
 
 
-def load_links(textfile):
+def load_links(textfile, graph):
     # load txt file into a python dictionary
     with open(textfile, "r") as file:
         for line in file.readlines():
@@ -58,7 +57,7 @@ def load_links(textfile):
 
 
 # check whether a node can be reached with recursive dfs
-def dfs(start, end, visited=[]):
+def dfs(graph, start, end, visited=[]):
     visited.append(start)
 
     if start == end:
@@ -66,14 +65,14 @@ def dfs(start, end, visited=[]):
 
     for node in graph[start]:
         if node not in visited:
-            result = dfs(node, end, visited)
+            result = dfs(graph, node, end, visited)
             if result:
                 return True
 
     return False
 
 # find the shortest path with bfs 
-def bfs(start, end):
+def bfs(graph, start, end):
     queue = []
     queue.append(Node(start, None))
     # keep track of visited nodes
@@ -101,7 +100,7 @@ def bfs(start, end):
 
 
 
-def test(path_list):
+def test(graph, path_list):
     for i in range(1, len(path_list)):
         if path_list[i] not in graph[path_list[i - 1]]:
             print(path_list[i - 1], "does not follow ", path_list[i])
@@ -110,7 +109,6 @@ def test(path_list):
 
 
 
-
-main()
-
+if __name__ == '__main__':
+    main()
 
