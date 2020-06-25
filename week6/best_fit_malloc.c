@@ -1,56 +1,6 @@
 ////////////////////////////////////////////////////////////////////////////////
-/*                 (๑＞◡＜๑)  Malloc Challenge!!  (◍＞◡＜◍)                   */
+/*                 THIS CODE RETURNS SEG FAULT T_T WILL FIX ASAP              */
 ////////////////////////////////////////////////////////////////////////////////
-
-//
-// Welcome to Malloc Challenge!! Your job is to invent a smart malloc algorithm.
-//
-// Rules:
-//
-// 1. Your job is to implement my_malloc(), my_free() and my_initialize().
-//   *  my_initialize() is called only once at the beginning of each challenge.
-//      You can initialize the memory allocator.
-//   *  my_malloc(size) is called every time an object is allocated. In this
-//      challenge, |size| is guaranteed to be a multiple of 8 bytes and meets
-//      8 <= size <= 4000.
-//   * my_free(ptr) is called every time an object is freed.
-// 2. The only library functions you can use in my_malloc() and my_free() are
-//    mmap_from_system() and munmap_to_system().
-//   *  mmap_from_system(size) allocates |size| bytes from the system. |size|
-//      needs to be a multiple of 4096 bytes. mmap_from_system(size) is a
-//      system call and heavy. You are expected to minimize the call of
-//      mmap_from_system(size) by reusing the returned
-//      memory region as much as possible.
-//   *  munmap_to_system(ptr, size) frees the memory region [ptr, ptr + size)
-//      to the system. |ptr| and |size| need to be a multiple of 4096 bytes.
-//      You are expected to free memory regions that are unused.
-//   *  You are NOT allowed to use any other library functions at all, including
-//      the default malloc() / free(), std:: libraries etc. This is because you
-//      are implementing malloc itself -- if you use something that may use
-//      malloc internally, it will result in an infinite recurion.
-// 3. simple_malloc(), simple_free() and simple_initialize() are an example,
-//    straightforward implementation. Your job is to invent a smarter malloc
-//    algorithm than the simple malloc.
-// 4. There are five challenges (Challenge 1, 2, 3, 4 and 5). Each challenge
-//    allocates and frees many objects with different patterns. Your malloc
-//    is evaluated by two criteria.
-//   *  [Speed] How faster your malloc finishes the challange compared to
-//      the simple malloc.
-//   *  [Memory utilization] How much your malloc is memory efficient.
-//      This is defined as (S1 / S2), where S1 is the total size of objects
-//      allocated at the end of the challange and S2 is the total size of
-//      mmap_from_system()ed regions at the end of the challenge. You can
-//      improve the memory utilization by decreasing memory fragmentation and
-//      reclaiming unused memory regions to the system with munmap_to_system().
-// 5. This program works on Linux and Mac but not on Windows. If you don't have
-//    Linux or Mac, you can use Google Cloud Shell (See https://docs.google.com/document/d/1TNu8OfoQmiQKy9i2jPeGk1DOOzSVfbt4RoP_wcXgQSs/edit#).
-// 6. You need to specify an '-lm' option to compile this program.
-//   *  gcc malloc_challenge.c -lm
-//   *  clang malloc_challenge.c -lm
-//
-// Enjoy! :D
-//
-
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
@@ -90,6 +40,7 @@ void munmap_to_system(void* ptr, size_t size);
 typedef struct simple_metadata_t {
   size_t size;
   struct simple_metadata_t* next;
+  struct simple_metadata_t* previous; //make doubly linked list
 } simple_metadata_t;
 
 // The global information of the simple malloc.
@@ -208,95 +159,85 @@ void simple_free(void* ptr) {
 //
 // Your job is to invent a smarter malloc algorithm here :)
 
-// to check with valgrind:
+// check with valgrind
 // compile then run valgrind ./a.out
 
 
-
-typedef struct my_metadata_t {
-  size_t size;
-  struct my_metadata_t* next;
-  struct my_metadata_t* previous; //make doubly linked list
-} my_metadata_t;
-
-typedef struct my_heap_t {
-  my_metadata_t* free_head;
-  my_metadata_t dummy;
-} my_heap_t;
-
-my_heap_t my_heap;
-
 void merge_free_slots()
 {
-  my_metadata_t* curr = my_heap.free_head;
-  unsigned long header_curr, header_next;
+	simple_metadata_t* curr = simple_heap.free_head;
+	unsigned long	header_curr, header_next;
 
-  while (curr->next) {
-    header_curr = (unsigned long)curr;
-    header_next = (unsigned long)curr->next;
-    // merge with the next free block (pointer arithmetic)
-    if (header_curr + curr->size + sizeof(my_metadata_t) == header_next)
-    {
-      // have to also include the size of the metadata between them
-      curr->size += curr->next->size + sizeof(my_metadata_t);
-      curr->next = curr->next->next;
-      if (curr->next)
-      {
-        curr->next->previous = curr;
-      }
-      else
-      {
-        break;
-      }
-    }
-    curr = curr->next;
-  }
+	while (curr->next) {
+		header_curr = (unsigned long)curr;
+		header_next = (unsigned long)curr->next;
+		// merge with the next free block (pointer arithmetic)
+		if (header_curr + curr->size + sizeof(simple_metadata_t) == header_next)
+		{
+			// have to also include the size of the metadata between them!!
+			curr->size += curr->next->size + sizeof(simple_metadata_t);
+			curr->next = curr->next->next;
+			if (curr->next)
+			{
+				curr->next->previous = curr;
+			}
+			else
+			{
+				break;
+			}
+		}
+		curr = curr->next;
+	}
 
 }
 
 
 // sort free list by address
-void add_to_free_list(my_metadata_t* metadata)
+void add_to_free_list(simple_metadata_t* metadata)
 {
   // printf("free head %lu \n", (unsigned long)simple_heap.free_head);
   // printf("metadata %lu \n", (unsigned long)metadata);
-
   // insert in front of the free list when address of metadata is before free list
-  if ((unsigned long)my_heap.free_head > (unsigned long)metadata)
-  {
-    my_heap.free_head->previous = metadata;
-    metadata->next = my_heap.free_head;
-    my_heap.free_head = metadata;
-  }
-  // else traverse the free list to find suitable place to add
-  else
-  {
-    my_metadata_t* curr = my_heap.free_head;
-    while (curr->next && (unsigned long)curr->next < (unsigned long)metadata)
-    {
-      curr = curr->next;
-    }
-    metadata->next = curr->next;
-    curr->next = metadata;
-  }
+	if ((unsigned long)simple_heap.free_head > (unsigned long)metadata)
+	{
+		simple_heap.free_head->previous = metadata;
+		metadata->next = simple_heap.free_head;
+		simple_heap.free_head = metadata;
+	}
+	// else traverse the free list to find suitable place to add
+	else
+	{
+	  simple_metadata_t* curr = simple_heap.free_head;
+	  while (curr->next && (unsigned long)curr->next < (unsigned long)metadata)
+	  {
+		  curr = curr->next;
+	  }
+	  metadata->next = curr->next;
+	  curr->next = metadata;
+	}
 
 }
 
 
 // Remove a free slot from the free list.
-void remove_from_free_list(my_metadata_t* metadata,
-                                  my_metadata_t* prev) {
+void remove_from_free_list(simple_metadata_t* metadata,
+                                  simple_metadata_t* prev) {
   if (prev)
   {
     // printf("Prev size is %lu.\n", prev->size);
     prev->next = metadata->next;
+    // metadata->next->previous = metadata->previous;
   }
   else
   {
-    my_heap.free_head = metadata->next;
+    simple_heap.free_head = metadata->next;
     // simple_heap.free_head->previous = NULL;
-    metadata->previous = NULL;
+    // metadata->previous = NULL;
   }
+  if (metadata->next)
+  {
+    metadata->next->previous = metadata->previous;
+	}
   metadata->next = NULL;
 }
 
@@ -305,10 +246,10 @@ void remove_from_free_list(my_metadata_t* metadata,
 // This is called only once at the beginning of each challenge.
 void my_initialize() {
   // & is address extractor
-  my_heap.free_head = &my_heap.dummy;
-  my_heap.dummy.size = 0;
-  my_heap.dummy.next = NULL;
-  my_heap.dummy.previous = NULL;
+  simple_heap.free_head = &simple_heap.dummy;
+  simple_heap.dummy.size = 0;
+  simple_heap.dummy.next = NULL;
+  simple_heap.dummy.previous = NULL;
 
 }
 
@@ -317,31 +258,22 @@ void my_initialize() {
 // allowed to use any library functions other than mmap_from_system /
 // munmap_to_system.
 void* my_malloc(size_t size) {
-  my_metadata_t* metadata = my_heap.free_head;
-  my_metadata_t* prev = NULL;
+  simple_metadata_t* metadata = simple_heap.free_head;
+  simple_metadata_t* prev = NULL;
   // printf("Metadata add %p\n", &metadata);
   // printf("Metadata size is %lu.\n", metadata->size);
-  // First-fit: Find the first free slot the object fits.
 
-  //first-fit while means
-  // while metadata size smaller than size, keep searching
-
-  // Try best-fit
-  // finding the best place to remove free slot
-  while (metadata && metadata->size < size) {
-    prev = metadata;
-    // printf("Prev size is %lu.\n", prev->size);
-    metadata = metadata->next;
-
-  }
 
   if (!metadata) {
+    // before mmap-ing the second time, try merging first
     // if (prev != simple_heap.free_head)
     // {
+    //   printf("HI1.\n");
     //   merge_free_slots();
     // }
     // else
     // {
+    //   printf("HI2.\n");
       // printf("No more space.\n");
       // There was no free slot available. We need to request a new memory region
       // from the system by calling mmap_from_system().
@@ -352,8 +284,8 @@ void* my_malloc(size_t size) {
       //     <---------------------->
       //            buffer_size
     size_t buffer_size = 4096;
-    my_metadata_t* metadata = (my_metadata_t*)mmap_from_system(buffer_size);
-    metadata->size = buffer_size - sizeof(my_metadata_t);
+    simple_metadata_t* metadata = (simple_metadata_t*)mmap_from_system(buffer_size);
+    metadata->size = buffer_size - sizeof(simple_metadata_t);
     metadata->next = NULL;
     metadata->previous = NULL;
       // Add the memory region to the free list.
@@ -363,56 +295,104 @@ void* my_malloc(size_t size) {
     return my_malloc(size);
   }
 
+
+
   // |ptr| is the beginning of the allocated object.
   //
   // ... | metadata | object | ...
   //     ^          ^
   //     metadata   ptr
-  void* ptr = metadata + 1;
-  size_t remaining_size = metadata->size - size;
-  metadata->size = size;
-  // Remove the free slot from the free list.
-  // printf("HI\n");
-  remove_from_free_list(metadata, prev);
 
-  if (remaining_size > sizeof(my_metadata_t)) {
-    // Create a new metadata for the remaining free slot.
-    //
-    // ... | metadata | object | metadata | free slot | ...
-    //     ^          ^        ^
-    //     metadata   ptr      new_metadata
-    //                 <------><---------------------->
-    //                   size       remaining size
-    my_metadata_t* new_metadata = (my_metadata_t*)((char*)ptr + size);
-    new_metadata->size = remaining_size - sizeof(my_metadata_t);
-    new_metadata->next = NULL;
-    new_metadata->previous = NULL;
-    // Add the remaining free slot to the free list.
-    add_to_free_list(new_metadata);
+  // size_t remaining_size = metadata->size - size;
+  // metadata->size = size;
+
+  // Try best-fit
+  // finding the best place to remove free slot
+  // steps
+  // 1) compare size we want to malloc and the size of the metadata
+  // 2) if fits, then i will just remove this free slot
+  // 3) if it does not fit, first i remove this free slot, then add the remaining to my free list
+
+  void* ptr;
+  while (metadata)
+  {
+
+    if (metadata->size == size)
+    {
+      // printf("HI\n");
+      ptr = metadata + 1;
+      remove_from_free_list(metadata, prev);
+      break;
+
+    }
+    else if (metadata->size > size + sizeof(simple_metadata_t))
+    // else
+    {
+      // printf("HI\n");
+      ptr = metadata + 1;
+      size_t remaining_size = metadata->size - size;
+      metadata->size = size;
+      remove_from_free_list(metadata, prev);
+
+      printf("HI\n");
+      simple_metadata_t* new_metadata = (simple_metadata_t*)((char*)ptr + size);
+      new_metadata->size = remaining_size - sizeof(simple_metadata_t);
+      new_metadata->next = NULL;
+      new_metadata->previous = NULL;
+      // Add the remaining free slot to the free list.
+
+      add_to_free_list(new_metadata);
+      break;
+    }
+    prev = metadata;
+    metadata = metadata->next;
 
   }
+
+
+
+  // Remove the free slot from the free list.
+  // printf("HI\n");
+  // remove_from_free_list(metadata, prev);
+
+  // if (remaining_size > sizeof(simple_metadata_t)) {
+  //   // Create a new metadata for the remaining free slot.
+  //   //
+  //   // ... | metadata | object | metadata | free slot | ...
+  //   //     ^          ^        ^
+  //   //     metadata   ptr      new_metadata
+  //   //                 <------><---------------------->
+  //   //                   size       remaining size
+  //   simple_metadata_t* new_metadata = (simple_metadata_t*)((char*)ptr + size);
+  //   new_metadata->size = remaining_size - sizeof(simple_metadata_t);
+  //   new_metadata->next = NULL;
+  //   new_metadata->previous = NULL;
+  //   // Add the remaining free slot to the free list.
+  //   add_to_free_list(new_metadata);
+
+  // }
 
   return ptr;
 }
 
 
 // list metadata contents from first to last
-// int i = 0;
-// void display() {
+int i = 0;
+void display() {
 
-//     my_metadata_t* metadata = my_heap.free_head;
-//     if (metadata == NULL)
-//     {
-//         return;
-//     }
-//     while (metadata->next != NULL)
-//     {
-//         i++;
-//         printf("Num of free blocks: %i\n", i);
-//         printf("%lu \n", metadata->size);
-//         metadata = metadata->next;
-//     }
-// }
+    simple_metadata_t* metadata = simple_heap.free_head;
+    if (metadata == NULL)
+    {
+        return;
+    }
+    while (metadata->next != NULL)
+    {
+        i++;
+        printf("Num of free blocks: %i\n", i);
+        // printf("%lu \n", metadata->size);
+        metadata = metadata->next;
+    }
+}
 
 
 
@@ -420,7 +400,7 @@ void* my_malloc(size_t size) {
 // any library functions other than mmap_from_system / munmap_to_system.
 void my_free(void* ptr) {
   // printf("Free head size is %lu.\n", simple_heap.free_head->size);
-  my_metadata_t* metadata = (my_metadata_t*)ptr - 1; //the metadata we want to free
+  simple_metadata_t* metadata = (simple_metadata_t*)ptr - 1; //the metadata we want to free
   add_to_free_list(metadata);
   merge_free_slots();
 
@@ -435,24 +415,24 @@ void my_free(void* ptr) {
 
 void test() {
   my_initialize();
-  for (int i = 0; i < 100; i++) {
-    void* ptr = my_malloc(96);
-    my_free(ptr);
-  }
-  // printf("End first\n");
-  void* ptrs[100];
-  for (int i = 0; i < 100; i++) {
-    ptrs[i] = my_malloc(96);
-    // display();
-  }
+  // for (int i = 0; i < 100; i++) {
+  //   void* ptr = my_malloc(96);
+  //   my_free(ptr);
+  // }
+  // // printf("End first\n");
+  // void* ptrs[100];
+  // for (int i = 0; i < 100; i++) {
+  //   ptrs[i] = my_malloc(96);
+  //   display();
+  // }
 
-  for (int i = 0; i < 100; i++) {
-    my_free(ptrs[i]);
-  }
+  // for (int i = 0; i < 100; i++) {
+  //   my_free(ptrs[i]);
+  // }
 
   char *str;
-  str = (char *)my_malloc(1);
-  my_free(str);
+	str = (char *)my_malloc(1);
+	my_free(str);
 
 }
 
@@ -753,6 +733,6 @@ void munmap_to_system(void* ptr, size_t size) {
 int main(int argc, char** argv) {
   srand(12);  // Set the rand seed to make the challenges non-deterministic.
   test();
-  run_challenges();
+  // run_challenges();
   return 0;
 }
